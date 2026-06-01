@@ -1655,10 +1655,19 @@ function Library:CreateWindow(opts)
     }, titlebar)
     listH(titleLeft, 12)
 
-    local logoBox = new("Frame", {
-        Size = UDim2.fromOffset(34, 34), BackgroundColor3 = Color3.fromRGB(255,255,255), ClipsDescendants = true,
-        BackgroundTransparency = wA(0.06), BorderSizePixel = 0, LayoutOrder = 1, ZIndex = 3,
+    local logoWrap = new("Frame", {
+        Size = UDim2.fromOffset(34, 34), BackgroundTransparency = 1,
+        BorderSizePixel = 0, LayoutOrder = 1, ZIndex = 3,
     }, titleLeft)
+    self._logoGlow = new("ImageLabel", {
+        AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5),
+        Size = UDim2.new(1, 20, 1, 20), BackgroundTransparency = 1,
+        Image = "rbxassetid://1316045217", ImageColor3 = COLOR.Accent, ImageTransparency = 0.55, ZIndex = 2,
+    }, logoWrap)
+    local logoBox = new("Frame", {
+        Size = UDim2.fromScale(1, 1), BackgroundColor3 = Color3.fromRGB(255,255,255), ClipsDescendants = true,
+        BackgroundTransparency = wA(0.06), BorderSizePixel = 0, ZIndex = 3,
+    }, logoWrap)
     corner(logoBox, 8)
     stroke(logoBox, Color3.fromRGB(255,255,255), wA(0.10), 1)
     self._logoBox = logoBox
