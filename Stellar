@@ -1060,18 +1060,15 @@ function Library:_showLoadingScreen(opts)
     function handle:Finish()
         if finished then return end
         finished = true
-        local fillTw = tween(barFill, 0.3, { Size = UDim2.new(1, 0, 1, 0) }, Enum.EasingStyle.Quad)
-        fillTw.Completed:Wait()
-        tween(container, 0.4, { Position = UDim2.fromScale(0.5, 0.45) }, Enum.EasingStyle.Quart)
-        tween(logoBox, 0.3, { BackgroundTransparency = 1 })
-        tween(logoStroke, 0.3, { Transparency = 1 })
-        if logoText then tween(logoText, 0.3, { TextTransparency = 1 }) end
-        if logoImg then tween(logoImg, 0.3, { ImageTransparency = 1 }) end
-        tween(nameLbl, 0.3, { TextTransparency = 1 })
-        tween(subLbl, 0.3, { TextTransparency = 1 })
-        tween(barTrack, 0.3, { BackgroundTransparency = 1 })
-        tween(barFill, 0.3, { BackgroundTransparency = 1 })
-        local fadeTw = tween(backdrop, 0.4, { BackgroundTransparency = 1 })
+        local D = 0.35
+        tween(container, D, { Position = UDim2.fromScale(0.5, 0.47) }, Enum.EasingStyle.Quart)
+        for _, d in ipairs(backdrop:GetDescendants()) do
+            if d:IsA("TextLabel") or d:IsA("TextBox") then tween(d, D, { TextTransparency = 1 }) end
+            if d:IsA("UIStroke") then tween(d, D, { Transparency = 1 }) end
+            if d:IsA("Frame") then tween(d, D, { BackgroundTransparency = 1 }) end
+            if d:IsA("ImageLabel") then tween(d, D, { ImageTransparency = 1 }) end
+        end
+        local fadeTw = tween(backdrop, D, { BackgroundTransparency = 1 })
         fadeTw.Completed:Wait()
         if gui then gui:Destroy() end
     end
@@ -1345,10 +1342,10 @@ function Library:_promptKey(opts, onSuccess, onCancel)
         tween(modalStroke, 0.3, { Transparency = 1 })
         tween(glow, 0.3, { BackgroundTransparency = 1 })
         for _, d in ipairs(modal:GetDescendants()) do
-            if d:IsA("TextLabel") or d:IsA("TextBox") then tween(d, 0.2, { TextTransparency = 1 }) end
-            if d:IsA("UIStroke") then tween(d, 0.2, { Transparency = 1 }) end
-            if d:IsA("Frame") and d ~= glow then tween(d, 0.2, { BackgroundTransparency = 1 }) end
-            if d:IsA("ImageLabel") then tween(d, 0.2, { ImageTransparency = 1 }) end
+            if d:IsA("TextLabel") or d:IsA("TextBox") then tween(d, 0.3, { TextTransparency = 1 }) end
+            if d:IsA("UIStroke") then tween(d, 0.3, { Transparency = 1 }) end
+            if d:IsA("Frame") and d ~= glow then tween(d, 0.3, { BackgroundTransparency = 1 }) end
+            if d:IsA("ImageLabel") then tween(d, 0.3, { ImageTransparency = 1 }) end
         end
         task.delay(0.32, function() if gui then gui:Destroy() end if cb then cb() end end)
     end
@@ -2577,11 +2574,19 @@ function Window:_createSettingsTab()
 
     tab:CreateSection("Credits")
     tab:CreateButton({
-        Name = "Dalkowski",
+        Name = "Dalkowski on discord",
         Description = "My Discord - click to copy",
         Icon = "at-sign",
         CopyValue = "Dalkowski",
     })
+    if self.Discord and self.Discord ~= "" then
+        tab:CreateButton({
+            Name = (self.Discord:gsub("^https?://", "")),
+            Description = "Invite link - click to copy",
+            Icon = "message-circle",
+            CopyValue = self.Discord,
+        })
+    end
 
     if self.Config.Enabled then
         tab._fixedCol = 2
