@@ -102,8 +102,9 @@ local function applyResponsiveScale(screenGui)
     workspace:GetPropertyChangedSignal("CurrentCamera"):Connect(rebind)
     task.spawn(function()
         local t = 0
-        while t < 8 do
+        while t < 1.5 do
             update()
+            if screenGui.AbsoluteSize.X >= 2 then break end
             t = t + RunService.Heartbeat:Wait()
         end
         update()
@@ -1569,7 +1570,7 @@ function Library:CreateWindow(opts)
     local window = new("Frame", {
         Name = "Window", AnchorPoint = Vector2.new(0.5, 0.5),
         Position = UDim2.fromScale(0.5, 0.5), Size = self._normalSize,
-        BackgroundColor3 = COLOR.BgDeep, BorderSizePixel = 0, ClipsDescendants = false,
+        BackgroundColor3 = COLOR.BgDeep, BackgroundTransparency = 1, BorderSizePixel = 0, ClipsDescendants = false,
     }, gui)
     corner(window, 14)
     local winStroke = stroke(window, COLOR.Accent, 0.2, 2)
@@ -1887,13 +1888,16 @@ function Library:CreateWindow(opts)
     corner(avatarPulse, 17)
     local pulseActive = true
     task.spawn(function()
-        while pulseActive and avatarPulse.Parent do
+        local cycles = 0
+        while pulseActive and avatarPulse.Parent and cycles < 8 do
+            cycles = cycles + 1
             tween(avatarPulse, 0.7, { BackgroundTransparency = 0.6 }, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut)
             task.wait(0.7)
             if not pulseActive or not avatarPulse.Parent then break end
             tween(avatarPulse, 0.7, { BackgroundTransparency = 0 }, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut)
             task.wait(0.7)
         end
+        if pulseActive and avatarPulse and avatarPulse.Parent then tween(avatarPulse, 0.4, { BackgroundTransparency = 1 }) end
     end)
 
     task.spawn(function()
