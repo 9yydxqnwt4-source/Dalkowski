@@ -1060,15 +1060,17 @@ function Library:_showLoadingScreen(opts)
     function handle:Finish()
         if finished then return end
         finished = true
-        local D = 0.35
-        tween(container, D, { Position = UDim2.fromScale(0.5, 0.47) }, Enum.EasingStyle.Quart)
+        local fillTw = tween(barFill, 0.25, { Size = UDim2.new(1, 0, 1, 0) }, Enum.EasingStyle.Quad)
+        fillTw.Completed:Wait()
+        local D = 0.3
+        local ES, ED = Enum.EasingStyle.Quad, Enum.EasingDirection.InOut
         for _, d in ipairs(backdrop:GetDescendants()) do
-            if d:IsA("TextLabel") or d:IsA("TextBox") then tween(d, D, { TextTransparency = 1 }) end
-            if d:IsA("UIStroke") then tween(d, D, { Transparency = 1 }) end
-            if d:IsA("Frame") then tween(d, D, { BackgroundTransparency = 1 }) end
-            if d:IsA("ImageLabel") then tween(d, D, { ImageTransparency = 1 }) end
+            if d:IsA("TextLabel") or d:IsA("TextBox") then tween(d, D, { TextTransparency = 1, TextStrokeTransparency = 1 }, ES, ED) end
+            if d:IsA("UIStroke") then tween(d, D, { Transparency = 1 }, ES, ED) end
+            if d:IsA("Frame") then tween(d, D, { BackgroundTransparency = 1 }, ES, ED) end
+            if d:IsA("ImageLabel") then tween(d, D, { ImageTransparency = 1 }, ES, ED) end
         end
-        local fadeTw = tween(backdrop, D, { BackgroundTransparency = 1 })
+        local fadeTw = tween(backdrop, D, { BackgroundTransparency = 1 }, ES, ED)
         fadeTw.Completed:Wait()
         if gui then gui:Destroy() end
     end
@@ -1334,18 +1336,16 @@ function Library:_promptKey(opts, onSuccess, onCancel)
             tween(glow, 0.3, { BackgroundColor3 = COLOR.Accent })
             task.wait(0.35)
         end
-        tween(backdrop, 0.3, { BackgroundTransparency = 1 })
-        tween(modal, 0.3, {
-            Size = UDim2.fromOffset(MW * 0.9, MH * 0.9),
-            BackgroundTransparency = 1,
-        }, Enum.EasingStyle.Quart)
-        tween(modalStroke, 0.3, { Transparency = 1 })
-        tween(glow, 0.3, { BackgroundTransparency = 1 })
+        local ES, ED = Enum.EasingStyle.Quad, Enum.EasingDirection.InOut
+        tween(backdrop, 0.3, { BackgroundTransparency = 1 }, ES, ED)
+        tween(modal, 0.3, { BackgroundTransparency = 1 }, ES, ED)
+        tween(modalStroke, 0.3, { Transparency = 1 }, ES, ED)
+        tween(glow, 0.3, { BackgroundTransparency = 1 }, ES, ED)
         for _, d in ipairs(modal:GetDescendants()) do
-            if d:IsA("TextLabel") or d:IsA("TextBox") then tween(d, 0.3, { TextTransparency = 1 }) end
-            if d:IsA("UIStroke") then tween(d, 0.3, { Transparency = 1 }) end
-            if d:IsA("Frame") and d ~= glow then tween(d, 0.3, { BackgroundTransparency = 1 }) end
-            if d:IsA("ImageLabel") then tween(d, 0.3, { ImageTransparency = 1 }) end
+            if d:IsA("TextLabel") or d:IsA("TextBox") then tween(d, 0.3, { TextTransparency = 1, TextStrokeTransparency = 1 }, ES, ED) end
+            if d:IsA("UIStroke") then tween(d, 0.3, { Transparency = 1 }, ES, ED) end
+            if d:IsA("Frame") and d ~= glow then tween(d, 0.3, { BackgroundTransparency = 1 }, ES, ED) end
+            if d:IsA("ImageLabel") then tween(d, 0.3, { ImageTransparency = 1 }, ES, ED) end
         end
         task.delay(0.32, function() if gui then gui:Destroy() end if cb then cb() end end)
     end
@@ -1655,21 +1655,12 @@ function Library:CreateWindow(opts)
     }, titlebar)
     listH(titleLeft, 12)
 
-    local logoWrap = new("Frame", {
-        Size = UDim2.fromOffset(34, 34), BackgroundTransparency = 1,
-        BorderSizePixel = 0, LayoutOrder = 1, ZIndex = 3,
-    }, titleLeft)
-    self._logoGlow = new("ImageLabel", {
-        AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5),
-        Size = UDim2.new(1, 20, 1, 20), BackgroundTransparency = 1,
-        Image = "rbxassetid://1316045217", ImageColor3 = COLOR.Accent, ImageTransparency = 0.55, ZIndex = 2,
-    }, logoWrap)
     local logoBox = new("Frame", {
-        Size = UDim2.fromScale(1, 1), BackgroundColor3 = Color3.fromRGB(255,255,255), ClipsDescendants = true,
-        BackgroundTransparency = wA(0.06), BorderSizePixel = 0, ZIndex = 3,
-    }, logoWrap)
+        Size = UDim2.fromOffset(34, 34), BackgroundColor3 = Color3.fromRGB(255,255,255), ClipsDescendants = true,
+        BackgroundTransparency = wA(0.06), BorderSizePixel = 0, LayoutOrder = 1, ZIndex = 3,
+    }, titleLeft)
     corner(logoBox, 8)
-    stroke(logoBox, Color3.fromRGB(255,255,255), wA(0.10), 1)
+    self._logoGlow = stroke(logoBox, COLOR.Accent, 0.4, 1.5)
     self._logoBox = logoBox
     if self.LogoIcon then
         self._logoImg = applyIcon(logoBox, self.LogoIcon, 34, 0.95)
