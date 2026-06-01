@@ -225,6 +225,58 @@ local function applyTextGradient(label, g)
     }, label)
 end
 
+-- Built-in status colours + default animated gradients. Any script using this
+-- library gets coloured statuses (label:SetStatus) and the animated game-name
+-- banner for free, without re-declaring palettes or gradient configs.
+local STATUS_COLORS = {
+    active  = Color3.fromRGB(52, 211, 153),
+    running = Color3.fromRGB(52, 211, 153),
+    ok      = Color3.fromRGB(52, 211, 153),
+    on      = Color3.fromRGB(52, 211, 153),
+    stopped = Color3.fromRGB(239, 68, 68),
+    error   = Color3.fromRGB(239, 68, 68),
+    failed  = Color3.fromRGB(239, 68, 68),
+    off     = Color3.fromRGB(239, 68, 68),
+    waiting = Color3.fromRGB(245, 158, 11),
+    loading = Color3.fromRGB(245, 158, 11),
+    paused  = Color3.fromRGB(245, 158, 11),
+    warn    = Color3.fromRGB(245, 158, 11),
+    idle    = Color3.fromRGB(160, 160, 160),
+    default = Color3.fromRGB(160, 160, 160),
+}
+local DEFAULT_LABEL_GRADIENT = {
+    Colors = {
+        Color3.fromRGB(34, 197, 94),
+        Color3.fromRGB(220, 255, 200),
+        Color3.fromRGB(34, 197, 94),
+    },
+}
+local DEFAULT_GAME_GRADIENT = {
+    Colors = {
+        Color3.fromRGB(167, 139, 250),
+        Color3.fromRGB(96, 165, 250),
+        Color3.fromRGB(52, 211, 153),
+        Color3.fromRGB(250, 204, 21),
+        Color3.fromRGB(244, 114, 182),
+        Color3.fromRGB(167, 139, 250),
+    },
+    Rotation = 0,
+}
+
+-- Drives an animated text gradient (left-to-right shimmer) on any UIGradient.
+local function animateGradient(gradInst)
+    if not gradInst then return end
+    task.spawn(function()
+        local TweenService = game:GetService("TweenService")
+        local info = TweenInfo.new(2.4, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true, 0)
+        while gradInst and gradInst.Parent do
+            gradInst.Offset = Vector2.new(-1, 0)
+            TweenService:Create(gradInst, info, { Offset = Vector2.new(1, 0) }):Play()
+            task.wait(4.8)
+        end
+    end)
+end
+
 local tooltipGui, tooltipFrame, tooltipText, tooltipRsConn
 local function ensureTooltip()
     if tooltipGui and tooltipGui.Parent then return end
@@ -3557,6 +3609,15 @@ function Tab:CreateDropdown(opts)
     stroke(menu, Color3.fromRGB(255,255,255), wA(0.12), 1)
     pad(menu, 5, 5, 5, 5)
     listV(menu, 2)
+    local menuScroll = new("ScrollingFrame", {
+        Size = UDim2.new(1, 0, 0, 0), AutomaticSize = Enum.AutomaticSize.Y,
+        BackgroundTransparency = 1, BorderSizePixel = 0, ZIndex = 50, Active = true,
+        ScrollBarThickness = 3, ScrollBarImageColor3 = Color3.fromRGB(255, 255, 255),
+        ScrollBarImageTransparency = 0.55, ScrollingDirection = Enum.ScrollingDirection.Y,
+        CanvasSize = UDim2.new(0, 0, 0, 0), AutomaticCanvasSize = Enum.AutomaticSize.Y,
+    }, menu)
+    new("UISizeConstraint", { MaxSize = Vector2.new(10000, 220) }, menuScroll)
+    listV(menuScroll, 2)
     local optionButtons = {}
     local function isSelected(opt)
         if multi then return table.find(current, opt) ~= nil
@@ -3572,7 +3633,7 @@ function Tab:CreateDropdown(opts)
                 BackgroundTransparency = sel and wA(0.16) or 1,
                 BorderSizePixel = 0, Text = "", AutoButtonColor = false,
                 LayoutOrder = i, ZIndex = 51,
-            }, menu)
+            }, menuScroll)
             corner(row, 6)
             new("TextLabel", {
                 AnchorPoint = Vector2.new(0, 0.5), Position = UDim2.new(0, 11, 0.5, 0),
@@ -3815,13 +3876,14 @@ function Tab:CreateKeybind(opts)
 end
 
 function Tab:CreateLabel(text, icon, color, interval)
-    local gradient, tooltip
+    local gradient, tooltip, animateGrad
     if type(text) == "table" then
         local opts = mergeDefaults(text, "Label")
         text = opts.Text; icon = opts.Icon; color = opts.Color or opts.TextColor
         interval = opts.RefreshInterval
         gradient = opts.TextGradient
         tooltip = opts.Tooltip
+        animateGrad = opts.AnimatedGradient
     end
     local resolver
     if type(text) == "function" then resolver = text; text = tostring(resolver()) end
@@ -3838,7 +3900,8 @@ function Tab:CreateLabel(text, icon, color, interval)
         TextXAlignment = Enum.TextXAlignment.Left,
         TextTruncate = Enum.TextTruncate.AtEnd, ZIndex = 3,
     }, card)
-    if gradient then applyTextGradient(lbl, gradient) end
+    local gradInst = gradient and applyTextGradient(lbl, gradient) or nil
+    if gradInst and animateGrad then animateGradient(gradInst) end
     local destroyed = false
     if resolver and interval and interval > 0 then
         task.spawn(function()
@@ -3856,6 +3919,10 @@ function Tab:CreateLabel(text, icon, color, interval)
             if type(t) == "function" then resolver = t; t = tostring(resolver()) end
             lbl.Text = tostring(t)
             if c then lbl.TextColor3 = c end
+        end,
+        SetStatus = function(_, t, state)
+            lbl.Text = tostring(t)
+            lbl.TextColor3 = STATUS_COLORS[state] or STATUS_COLORS.default
         end,
         Get = function() return lbl.Text end,
         Refresh = function()
@@ -4154,6 +4221,10 @@ end
 function Window:SetStatus(opts)
     opts = opts or {}
     local accent = opts.Accent or COLOR.Accent
+    local labelGrad = opts.LabelGradient or DEFAULT_LABEL_GRADIENT
+    local gameGrad = opts.GameGradient or DEFAULT_GAME_GRADIENT
+    local animatedGrad = opts.AnimatedGradient
+    if animatedGrad == nil then animatedGrad = true end
     if self._statusBar then self._statusBar:Destroy() end
     if self._statusDivL then self._statusDivL:Destroy() end
     if self._statusDivR then self._statusDivR:Destroy() end
@@ -4200,7 +4271,7 @@ function Window:SetStatus(opts)
         TextColor3 = opts.LabelColor or Color3.fromRGB(74, 222, 128), TextXAlignment = Enum.TextXAlignment.Left,
         TextYAlignment = Enum.TextYAlignment.Center, LayoutOrder = 2, ZIndex = 4,
     }, row)
-    if opts.LabelGradient then applyTextGradient(labelLbl, opts.LabelGradient) end
+    if labelGrad then applyTextGradient(labelLbl, labelGrad) end
     local hasGame = (opts.Game ~= nil and opts.Game ~= "")
     local midSep = new("Frame", {
         Size = UDim2.fromOffset(1, 16), BackgroundColor3 = Color3.fromRGB(255,255,255),
@@ -4214,19 +4285,10 @@ function Window:SetStatus(opts)
         TextXAlignment = Enum.TextXAlignment.Left, TextYAlignment = Enum.TextYAlignment.Center,
         LayoutOrder = 4, ZIndex = 4,
     }, row)
-    local gameGradient = opts.GameGradient and applyTextGradient(rightLbl, opts.GameGradient) or nil
-    if gameGradient and opts.AnimatedGradient then
+    local gameGradient = gameGrad and applyTextGradient(rightLbl, gameGrad) or nil
+    if gameGradient and animatedGrad then
         rightLbl.TextTransparency = 0
-        task.spawn(function()
-            local TweenService = game:GetService("TweenService")
-            local info = TweenInfo.new(2.4, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true, 0)
-            while gameGradient and gameGradient.Parent do
-                gameGradient.Offset = Vector2.new(-1, 0)
-                local tw = TweenService:Create(gameGradient, info, { Offset = Vector2.new(1, 0) })
-                tw:Play()
-                task.wait(4.8)
-            end
-        end)
+        animateGradient(gameGradient)
     end
     if not opts.Game then
         task.spawn(function()
@@ -4320,5 +4382,385 @@ UserInputService.InputBegan:Connect(function(input, processed)
     end
     Library:SetVisibility(not anyVisible)
 end)
+
+-- ===========================================================================
+-- GAME DATA LAYER  (Library.Game)  +  UTILITIES  (Library.Util)
+-- Lazy + cached: nothing here touches the game until you actually call it, so
+-- it costs zero load time. Point it at ModuleScript paths and it requires and
+-- reads them for you, so game scripts stay tiny and you can skip GUI scraping.
+--   local Slimes = Library.Game.require("Source/Game/Items/Slimes")
+--   local list   = Library.Game.call("Source/Game/Items/Slimes", "getSortedSlimes")
+--   local goop   = Library.Game.value("goop")        -- scalar from data client
+--   local inv    = Library.Game.field("inventory", 5) -- table  (5s cache)
+-- ===========================================================================
+do
+    local RS = game:GetService("ReplicatedStorage")
+    local Game = {}
+    Library.Game = Game
+
+    -- caches filled only on first use
+    local moduleCache, instanceCache = {}, {}
+    local dataCache, currencyFetched = {}, {}
+    local dataClientCache = nil
+
+    -- Resolve "a/b/c", "a.b.c", or an Instance to an Instance under root (RS).
+    local function resolveInstance(path, root)
+        if typeof(path) == "Instance" then return path end
+        root = root or RS
+        local key = tostring(root) .. "|" .. tostring(path)
+        local hit = instanceCache[key]
+        if hit and hit.Parent then return hit end
+        local node = root
+        for seg in tostring(path):gmatch("[^/%.]+") do
+            node = node and node:FindFirstChild(seg)
+            if not node then break end
+        end
+        if node then instanceCache[key] = node end
+        return node
+    end
+    Game.find = function(path, root) return resolveInstance(path, root) end
+
+    -- Require a ModuleScript by path (cached on success, pcall-guarded).
+    Game.require = function(path, root)
+        local key = (typeof(path) == "Instance" and tostring(path:GetFullName()))
+            or (tostring(root or RS) .. "|" .. tostring(path))
+        if moduleCache[key] ~= nil then return moduleCache[key] end
+        local inst = resolveInstance(path, root)
+        if not inst or not inst:IsA("ModuleScript") then return nil end
+        local ok, mod = pcall(require, inst)
+        if ok then moduleCache[key] = mod; return mod end
+        return nil
+    end
+
+    -- Require a module, then safely call a method on it (self-call, then dot).
+    Game.call = function(path, method, ...)
+        local mod = Game.require(path)
+        if type(mod) ~= "table" or type(method) ~= "string" then return nil end
+        local fn = mod[method]
+        if type(fn) ~= "function" then return nil end
+        local args = { ... }
+        local ok, res = pcall(function() return fn(mod, table.unpack(args)) end)
+        if ok then return res end
+        ok, res = pcall(function() return fn(table.unpack(args)) end)
+        if ok then return res end
+        return nil
+    end
+
+    -- Override the data client for games that don't use Packages.DataService.
+    Game.setDataClient = function(pathOrInstance)
+        dataClientCache = nil
+        if pathOrInstance ~= nil then
+            local mod = Game.require(pathOrInstance)
+            if type(mod) == "table" then
+                if type(mod.client) == "table" and mod.client.get then dataClientCache = mod.client
+                elseif mod.get then dataClientCache = mod end
+            end
+        end
+        return dataClientCache
+    end
+
+    -- Lazily auto-locate the data client (Packages.DataService(.client) or *DataServiceClient).
+    Game.dataClient = function()
+        if dataClientCache then return dataClientCache end
+        pcall(function()
+            local pkgs = RS:FindFirstChild("Packages")
+            if not pkgs then return end
+            local mod = pkgs:FindFirstChild("DataService")
+            if mod and mod:IsA("ModuleScript") then
+                local ok, ds = pcall(require, mod)
+                if ok and type(ds) == "table" then
+                    if type(ds.client) == "table" and ds.client.get then dataClientCache = ds.client; return end
+                    if ds.get then dataClientCache = ds; return end
+                end
+            end
+            for _, child in ipairs(pkgs:GetDescendants()) do
+                if child:IsA("ModuleScript") and child.Name:find("DataServiceClient") then
+                    local ok, ds = pcall(require, child)
+                    if ok and type(ds) == "table" and ds.get then dataClientCache = ds; return end
+                end
+            end
+        end)
+        return dataClientCache
+    end
+
+    -- Read a TABLE field from the data client (fetch + retry + TTL cache).
+    Game.field = function(key, ttl)
+        ttl = ttl or 2
+        local entry = dataCache[key]
+        if entry and tick() - entry.t < ttl then return entry.v end
+        local ds = Game.dataClient(); if not ds then return nil end
+        local data
+        pcall(function() if ds.fetch then ds:fetch(key) end end)
+        for _ = 1, 4 do
+            pcall(function() data = ds:get(key) end)
+            if type(data) == "table" and next(data) then break end
+            task.wait(0.5)
+        end
+        if type(data) == "table" then dataCache[key] = { v = data, t = tick() } end
+        return data
+    end
+
+    -- Read a SCALAR value from the data client (fetch-once + get).
+    Game.value = function(key)
+        local ds = Game.dataClient(); if not ds then return nil end
+        if not currencyFetched[key] then
+            pcall(function() if ds.fetch then ds:fetch(key) end end)
+            currencyFetched[key] = true
+        end
+        local v; pcall(function() v = ds:get(key) end)
+        return v
+    end
+
+    Game.clearCache = function()
+        moduleCache, instanceCache = {}, {}
+        dataCache, currencyFetched = {}, {}
+        dataClientCache = nil
+    end
+
+    -- ----- Pure utilities (no side effects) -----
+    local Util = {}
+    Library.Util = Util
+    local SUF = { "", "K", "M", "B", "T", "Qd", "Qn", "Sx", "Sp", "O", "N",
+        "De", "Ud", "Dd", "TdD", "QdD", "QnD", "SxD", "SpD", "OcD", "NvD" }
+
+    Util.compact = function(n)
+        n = tonumber(n); if not n then return "?" end
+        local sign = n < 0 and "-" or ""; n = math.abs(n)
+        if n < 1000 then return sign .. tostring(math.floor(n)) end
+        for i = #SUF, 2, -1 do
+            local mult = 10 ^ (3 * (i - 1))
+            if n >= mult then return sign .. string.format("%.1f%s", n / mult, SUF[i]) end
+        end
+        return sign .. tostring(math.floor(n))
+    end
+
+    Util.commas = function(n)
+        local s = tostring(math.floor(tonumber(n) or 0))
+        local sign = ""
+        if s:sub(1, 1) == "-" then sign = "-"; s = s:sub(2) end
+        local out, len = "", #s
+        for i = 1, len do
+            if i > 1 and (len - i + 1) % 3 == 0 then out = out .. "," end
+            out = out .. s:sub(i, i)
+        end
+        return sign .. out
+    end
+
+    Util.parseNumber = function(text)
+        if text == nil then return 0 end
+        text = tostring(text):gsub(",", ""):gsub("%s", "")
+        if text == "" then return 0 end
+        local mult = 1
+        for i = #SUF, 2, -1 do
+            local suf = SUF[i]
+            if #text > #suf and text:sub(-#suf):lower() == suf:lower() then
+                mult = 10 ^ (3 * (i - 1)); text = text:sub(1, #text - #suf); break
+            end
+        end
+        local n = tonumber(text)
+        return n and n * mult or 0
+    end
+
+    Util.player = function() return game:GetService("Players").LocalPlayer end
+    Util.char = function(plr) plr = plr or Util.player(); return plr and plr.Character or nil end
+    Util.hrp = function(plr) local c = Util.char(plr); return c and c:FindFirstChild("HumanoidRootPart") or nil end
+    Util.humanoid = function(plr) local c = Util.char(plr); return c and c:FindFirstChildOfClass("Humanoid") or nil end
+end
+
+-- ===========================================================================
+-- LIVE STATS  (Library.Stats)  — executions + live users via Discord webhook
+-- One persistent message PER GAME, EDITED in place (never spammed). State lives
+-- compactly inside the message (executions count + session heartbeats with a
+-- TTL), so it works with only a webhook — no backend. Lazy: nothing runs until
+-- Library.Stats.start{} is called.
+--
+--   Library.Stats.start({
+--       Webhook   = "https://discord.com/api/webhooks/...",
+--       MessageId = "123...",   -- optional; share one id across users = true global count
+--       Interval  = 600,        -- seconds between edits (default 10 min)
+--       Title     = "VaenHub",
+--   })
+--   Library.Stats.refreshNow()  -- hook this to a GUI button
+--
+-- Webhook-only limits (Discord, not this code): cannot rename channels (needs a
+-- bot), no clickable Discord buttons, and the global count is read-modify-write
+-- so heavy concurrent bursts can drop the odd +1 / hit edit rate-limits.
+-- ===========================================================================
+do
+    local HttpService = game:GetService("HttpService")
+    local Stats = {}
+    Library.Stats = Stats
+
+    local S = {
+        running = false, gen = 0, webhook = nil, msgId = nil,
+        interval = 600, ttl = 1500, title = "Stellar", game = nil, counted = false,
+        sid = (HttpService:GenerateGUID(false):gsub("-", "")):sub(1, 6),
+    }
+
+    local function req(method, url, body)
+        if not exec.request then return nil end
+        local ok, res = pcall(exec.request, {
+            Url = url, Method = method,
+            Headers = { ["Content-Type"] = "application/json", ["User-Agent"] = "Roblox" },
+            Body = body and HttpService:JSONEncode(body) or nil,
+        })
+        return ok and res or nil
+    end
+
+    local function gameName()
+        if S.game then return S.game end
+        local nm = "Game " .. tostring(game.PlaceId)
+        pcall(function() nm = game:GetService("MarketplaceService"):GetProductInfo(game.PlaceId).Name or nm end)
+        S.game = nm
+        return nm
+    end
+
+    -- compact state stored in message content:  "<executions>|<sid:ts;sid:ts;...>"
+    local function parseState(content)
+        local execs, sessions = 0, {}
+        if type(content) == "string" then
+            local e, s = content:match("^(%d+)|(.*)$")
+            if e then
+                execs = tonumber(e) or 0
+                for sid, ts in tostring(s):gmatch("(%w+):(%d+)") do sessions[sid] = tonumber(ts) end
+            end
+        end
+        return execs, sessions
+    end
+    local function serializeState(execs, sessions)
+        local parts = {}
+        for sid, ts in pairs(sessions) do parts[#parts + 1] = sid .. ":" .. tostring(ts) end
+        return tostring(execs) .. "|" .. table.concat(parts, ";")
+    end
+
+    local function buildPayload(execs, live)
+        return {
+            username = S.title,
+            embeds = { {
+                title = "📊 " .. gameName(),
+                color = 5793266,
+                fields = {
+                    { name = "⬇️ Executions", value = "**" .. tostring(execs) .. "**", inline = true },
+                    { name = "🟢 Live", value = "**" .. tostring(live) .. "**", inline = true },
+                },
+                footer = { text = S.title .. " · auto-updates every " .. math.floor(S.interval / 60) .. " min" },
+                timestamp = os.date("!%Y-%m-%dT%H:%M:%SZ"),
+            } },
+        }
+    end
+
+    local function base() return (S.webhook:gsub("%?.*$", "")) end
+
+    -- one read-modify-write pass
+    local function cycle(isFirst)
+        local now = os.time()
+        local execs, sessions = 0, {}
+        if S.msgId then
+            local res = req("GET", base() .. "/messages/" .. S.msgId)
+            local body = res and (res.Body or res.body)
+            if type(body) == "string" and body ~= "" then
+                local ok, data = pcall(function() return HttpService:JSONDecode(body) end)
+                if ok and type(data) == "table" then execs, sessions = parseState(data.content) end
+            end
+        end
+        if isFirst and not S.counted then execs = execs + 1; S.counted = true end
+        sessions[S.sid] = now
+        local live = 0
+        for sid, ts in pairs(sessions) do
+            if type(ts) ~= "number" or now - ts > S.ttl then sessions[sid] = nil
+            else live = live + 1 end
+        end
+        local payload = buildPayload(execs, live)
+        payload.content = serializeState(execs, sessions)
+        if S.msgId then
+            local res = req("PATCH", base() .. "/messages/" .. S.msgId, payload)
+            local code = res and (res.StatusCode or res.Status or res.status_code)
+            if code == 429 then
+                local wait = 5
+                pcall(function()
+                    local d = HttpService:JSONDecode(res.Body or res.body or "{}")
+                    if d and d.retry_after then wait = tonumber(d.retry_after) or 5 end
+                end)
+                task.wait(math.min(wait, 15))
+                req("PATCH", base() .. "/messages/" .. S.msgId, payload)
+            end
+            return true
+        end
+        -- no id yet → create the message and remember it
+        local sep = S.webhook:find("?", 1, true) and "&" or "?"
+        local res = req("POST", S.webhook .. sep .. "wait=true", payload)
+        local body = res and (res.Body or res.body)
+        if type(body) == "string" and body ~= "" then
+            local ok, data = pcall(function() return HttpService:JSONDecode(body) end)
+            if ok and type(data) == "table" and data.id then
+                S.msgId = tostring(data.id)
+                pcall(function()
+                    if exec.writefile then
+                        safeMkdir("Stellar")
+                        exec.writefile("Stellar/stats_" .. tostring(game.PlaceId) .. ".txt", S.msgId)
+                    end
+                end)
+                req("POST", S.webhook, {
+                    username = S.title,
+                    embeds = { {
+                        title = "⚙️ Stats message created · " .. gameName(),
+                        description = "Share this id so every user edits the SAME message (true global count):\n"
+                            .. "```lua\nMessageId = \"" .. S.msgId .. "\"\n```",
+                        color = 16776960,
+                    } },
+                })
+                return true
+            end
+        end
+        return false
+    end
+
+    function Stats.start(opts)
+        opts = opts or {}
+        if type(opts.Webhook) ~= "string" or opts.Webhook == "" then return false, "no webhook" end
+        if S.running then return true end
+        S.webhook = opts.Webhook
+        S.interval = tonumber(opts.Interval) or 600
+        S.ttl = tonumber(opts.LiveTTL) or math.max(S.interval * 2 + 300, 900)
+        S.title = opts.Title or "Stellar"
+        S.game = opts.Game
+        S.counted = false
+        S.msgId = opts.MessageId
+        if not S.msgId then
+            pcall(function()
+                local p = "Stellar/stats_" .. tostring(game.PlaceId) .. ".txt"
+                if exec.isfile and exec.readfile and exec.isfile(p) then
+                    local id = exec.readfile(p)
+                    if type(id) == "string" and id:match("^%d+$") then S.msgId = id end
+                end
+            end)
+        end
+        S.running = true
+        S.gen = S.gen + 1
+        local myGen = S.gen
+        task.spawn(function()
+            task.wait(math.random(0, 8))   -- jitter so users don't all write at once
+            pcall(cycle, true)
+            while S.running and S.gen == myGen do
+                local waited = 0
+                while waited < S.interval and S.running and S.gen == myGen do
+                    task.wait(2); waited = waited + 2
+                end
+                if not (S.running and S.gen == myGen) then break end
+                pcall(cycle, false)
+            end
+        end)
+        return true
+    end
+
+    function Stats.refreshNow()
+        if not S.running then return false end
+        task.spawn(function() pcall(cycle, false) end)
+        return true
+    end
+
+    function Stats.stop() S.running = false; S.gen = S.gen + 1 end
+    function Stats.getMessageId() return S.msgId end
+end
 
 return Library
