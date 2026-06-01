@@ -1,4 +1,3 @@
-warn("[Stellar] two-column categorized build loaded (v4)")
 local LIBRARY_CONFIG = {
     GlowWhite = {
         Color = Color3.fromRGB(255, 255, 255),
