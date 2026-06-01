@@ -1,3 +1,4 @@
+warn("[Stellar] single-column build loaded (v3)")
 local LIBRARY_CONFIG = {
     GlowWhite = {
         Color = Color3.fromRGB(255, 255, 255),
@@ -681,7 +682,6 @@ function Library:Confirm(opts, onYes, onNo)
     }, gui)
     corner(modal, 14)
     local cmStroke = stroke(modal, Color3.fromRGB(255,255,255), wA(0.1), 1)
-    addGlow(modal, 14)
     local cmHalo = new("ImageLabel", {
         AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5),
         Size = UDim2.fromOffset(MW + 84, MH + 84), BackgroundTransparency = 1,
@@ -1554,7 +1554,7 @@ function Library:CreateWindow(opts)
     local gui = new("ScreenGui", {
         Name = LIBRARY_CONFIG.StealthMode and randName(12) or ("Library_" .. self.Name),
         ResetOnSpawn = false,
-        IgnoreGuiInset = true, ZIndexBehavior = Enum.ZIndexBehavior.Sibling, DisplayOrder = 1000,
+        IgnoreGuiInset = true, ZIndexBehavior = Enum.ZIndexBehavior.Sibling, DisplayOrder = 99990,
     })
     safeParent(gui)
     self._uiScale = applyResponsiveScale(gui)
@@ -1852,9 +1852,13 @@ function Library:CreateWindow(opts)
         Size = UDim2.new(0, SBW, 0, 1), BackgroundColor3 = SEP_COLOR,
         BackgroundTransparency = 0.45, BorderSizePixel = 0, ZIndex = 3,
     }, window)
-    local tabList = new("Frame", {
+    local tabList = new("ScrollingFrame", {
         Name = "TabList", Position = UDim2.fromOffset(10, 12),
         Size = UDim2.new(1, -20, 1, -64), BackgroundTransparency = 1, ZIndex = 2,
+        BorderSizePixel = 0, Active = true, ClipsDescendants = true,
+        ScrollBarThickness = 3, ScrollBarImageColor3 = COLOR.Accent, ScrollBarImageTransparency = 0.5,
+        ScrollingDirection = Enum.ScrollingDirection.Y,
+        CanvasSize = UDim2.new(0, 0, 0, 0), AutomaticCanvasSize = Enum.AutomaticSize.Y,
     }, sidebar)
     listV(tabList, 5)
     self.TabList = tabList
@@ -3107,8 +3111,7 @@ end
 local function panelOf(tab)
     if not tab._cols then return tab.Panel end
     if tab._fixedCol then return tab._cols[tab._fixedCol] end
-    tab._colIdx = (tab._colIdx or 0) + 1
-    return tab._cols[((tab._colIdx - 1) % 2) + 1]
+    return tab._cols[1]
 end
 
 local function nextOrder(tab)
