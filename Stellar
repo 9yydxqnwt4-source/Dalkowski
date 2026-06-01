@@ -1,3 +1,4 @@
+warn("[Stellar] two-column categorized build loaded (v4)")
 local LIBRARY_CONFIG = {
     GlowWhite = {
         Color = Color3.fromRGB(255, 255, 255),
@@ -3609,13 +3610,12 @@ function Tab:CreateDropdown(opts)
     pad(menu, 5, 5, 5, 5)
     listV(menu, 2)
     local menuScroll = new("ScrollingFrame", {
-        Size = UDim2.new(1, 0, 0, 0), AutomaticSize = Enum.AutomaticSize.Y,
+        Size = UDim2.new(1, 0, 0, 30),
         BackgroundTransparency = 1, BorderSizePixel = 0, ZIndex = 50, Active = true,
         ScrollBarThickness = 3, ScrollBarImageColor3 = Color3.fromRGB(255, 255, 255),
         ScrollBarImageTransparency = 0.55, ScrollingDirection = Enum.ScrollingDirection.Y,
         CanvasSize = UDim2.new(0, 0, 0, 0), AutomaticCanvasSize = Enum.AutomaticSize.Y,
     }, menu)
-    new("UISizeConstraint", { MaxSize = Vector2.new(10000, 220) }, menuScroll)
     listV(menuScroll, 2)
     local optionButtons = {}
     local function isSelected(opt)
@@ -3672,6 +3672,8 @@ function Tab:CreateDropdown(opts)
             end)
             table.insert(optionButtons, row)
         end
+        local rows = #options
+        menuScroll.Size = UDim2.new(1, 0, 0, math.max(30, math.min(rows * 30 - 2, 220)))
     end
     rebuildMenu()
     local function positionMenu()
@@ -4566,200 +4568,40 @@ do
     Util.humanoid = function(plr) local c = Util.char(plr); return c and c:FindFirstChildOfClass("Humanoid") or nil end
 end
 
--- ===========================================================================
--- LIVE STATS  (Library.Stats)  — executions + live users via Discord webhook
--- One persistent message PER GAME, EDITED in place (never spammed). State lives
--- compactly inside the message (executions count + session heartbeats with a
--- TTL), so it works with only a webhook — no backend. Lazy: nothing runs until
--- Library.Stats.start{} is called.
---
---   Library.Stats.start({
---       Webhook   = "https://discord.com/api/webhooks/...",
---       MessageId = "123...",   -- optional; share one id across users = true global count
---       Interval  = 600,        -- seconds between edits (default 10 min)
---       Title     = "VaenHub",
---   })
---   Library.Stats.refreshNow()  -- hook this to a GUI button
---
--- Webhook-only limits (Discord, not this code): cannot rename channels (needs a
--- bot), no clickable Discord buttons, and the global count is read-modify-write
--- so heavy concurrent bursts can drop the odd +1 / hit edit rate-limits.
--- ===========================================================================
-do
-    local HttpService = game:GetService("HttpService")
-    local Stats = {}
-    Library.Stats = Stats
-
-    local S = {
-        running = false, gen = 0, webhook = nil, msgId = nil,
-        interval = 600, ttl = 1500, title = "Stellar", game = nil, counted = false,
-        sid = (HttpService:GenerateGUID(false):gsub("-", "")):sub(1, 6),
-    }
-
-    local function req(method, url, body)
-        if not exec.request then return nil end
-        local ok, res = pcall(exec.request, {
-            Url = url, Method = method,
-            Headers = { ["Content-Type"] = "application/json", ["User-Agent"] = "Roblox" },
-            Body = body and HttpService:JSONEncode(body) or nil,
-        })
-        return ok and res or nil
+-- Copy/paste every toggle, slider, dropdown, etc. between accounts as one string.
+function Library:ExportSettings()
+    local data = {}
+    for flag, element in pairs(Library.Flags) do
+        local v = element and element.Value
+        if typeof(v) == "Color3" then
+            data[flag] = { _t = "Color3", r = v.R, g = v.G, b = v.B }
+        elseif type(v) == "table" then
+            local t = {}; for i, x in ipairs(v) do t[i] = x end; data[flag] = t
+        elseif type(v) == "boolean" or type(v) == "number" or type(v) == "string" then
+            data[flag] = v
+        end
     end
+    local ok, json = pcall(function() return game:GetService("HttpService"):JSONEncode(data) end)
+    return ok and json or nil
+end
 
-    local function gameName()
-        if S.game then return S.game end
-        local nm = "Game " .. tostring(game.PlaceId)
-        pcall(function() nm = game:GetService("MarketplaceService"):GetProductInfo(game.PlaceId).Name or nm end)
-        S.game = nm
-        return nm
-    end
-
-    -- compact state stored in message content:  "<executions>|<sid:ts;sid:ts;...>"
-    local function parseState(content)
-        local execs, sessions = 0, {}
-        if type(content) == "string" then
-            local e, s = content:match("^(%d+)|(.*)$")
-            if e then
-                execs = tonumber(e) or 0
-                for sid, ts in tostring(s):gmatch("(%w+):(%d+)") do sessions[sid] = tonumber(ts) end
+function Library:ImportSettings(str)
+    if type(str) ~= "string" or str == "" then return false, "empty" end
+    local ok, data = pcall(function() return game:GetService("HttpService"):JSONDecode(str) end)
+    if not ok or type(data) ~= "table" then return false, "bad data" end
+    local applied = 0
+    for flag, value in pairs(data) do
+        local element = Library.Flags[flag]
+        if element and element.Set then
+            if type(value) == "table" and value._t == "Color3" then
+                pcall(function() element:Set(Color3.new(value.r, value.g, value.b)) end)
+            else
+                pcall(function() element:Set(value) end)
             end
+            applied = applied + 1
         end
-        return execs, sessions
     end
-    local function serializeState(execs, sessions)
-        local parts = {}
-        for sid, ts in pairs(sessions) do parts[#parts + 1] = sid .. ":" .. tostring(ts) end
-        return tostring(execs) .. "|" .. table.concat(parts, ";")
-    end
-
-    local function buildPayload(execs, live)
-        return {
-            username = S.title,
-            embeds = { {
-                title = "📊 " .. gameName(),
-                color = 5793266,
-                fields = {
-                    { name = "⬇️ Executions", value = "**" .. tostring(execs) .. "**", inline = true },
-                    { name = "🟢 Live", value = "**" .. tostring(live) .. "**", inline = true },
-                },
-                footer = { text = S.title .. " · auto-updates every " .. math.floor(S.interval / 60) .. " min" },
-                timestamp = os.date("!%Y-%m-%dT%H:%M:%SZ"),
-            } },
-        }
-    end
-
-    local function base() return (S.webhook:gsub("%?.*$", "")) end
-
-    -- one read-modify-write pass
-    local function cycle(isFirst)
-        local now = os.time()
-        local execs, sessions = 0, {}
-        if S.msgId then
-            local res = req("GET", base() .. "/messages/" .. S.msgId)
-            local body = res and (res.Body or res.body)
-            if type(body) == "string" and body ~= "" then
-                local ok, data = pcall(function() return HttpService:JSONDecode(body) end)
-                if ok and type(data) == "table" then execs, sessions = parseState(data.content) end
-            end
-        end
-        if isFirst and not S.counted then execs = execs + 1; S.counted = true end
-        sessions[S.sid] = now
-        local live = 0
-        for sid, ts in pairs(sessions) do
-            if type(ts) ~= "number" or now - ts > S.ttl then sessions[sid] = nil
-            else live = live + 1 end
-        end
-        local payload = buildPayload(execs, live)
-        payload.content = serializeState(execs, sessions)
-        if S.msgId then
-            local res = req("PATCH", base() .. "/messages/" .. S.msgId, payload)
-            local code = res and (res.StatusCode or res.Status or res.status_code)
-            if code == 429 then
-                local wait = 5
-                pcall(function()
-                    local d = HttpService:JSONDecode(res.Body or res.body or "{}")
-                    if d and d.retry_after then wait = tonumber(d.retry_after) or 5 end
-                end)
-                task.wait(math.min(wait, 15))
-                req("PATCH", base() .. "/messages/" .. S.msgId, payload)
-            end
-            return true
-        end
-        -- no id yet → create the message and remember it
-        local sep = S.webhook:find("?", 1, true) and "&" or "?"
-        local res = req("POST", S.webhook .. sep .. "wait=true", payload)
-        local body = res and (res.Body or res.body)
-        if type(body) == "string" and body ~= "" then
-            local ok, data = pcall(function() return HttpService:JSONDecode(body) end)
-            if ok and type(data) == "table" and data.id then
-                S.msgId = tostring(data.id)
-                pcall(function()
-                    if exec.writefile then
-                        safeMkdir("Stellar")
-                        exec.writefile("Stellar/stats_" .. tostring(game.PlaceId) .. ".txt", S.msgId)
-                    end
-                end)
-                req("POST", S.webhook, {
-                    username = S.title,
-                    embeds = { {
-                        title = "⚙️ Stats message created · " .. gameName(),
-                        description = "Share this id so every user edits the SAME message (true global count):\n"
-                            .. "```lua\nMessageId = \"" .. S.msgId .. "\"\n```",
-                        color = 16776960,
-                    } },
-                })
-                return true
-            end
-        end
-        return false
-    end
-
-    function Stats.start(opts)
-        opts = opts or {}
-        if type(opts.Webhook) ~= "string" or opts.Webhook == "" then return false, "no webhook" end
-        if S.running then return true end
-        S.webhook = opts.Webhook
-        S.interval = tonumber(opts.Interval) or 600
-        S.ttl = tonumber(opts.LiveTTL) or math.max(S.interval * 2 + 300, 900)
-        S.title = opts.Title or "Stellar"
-        S.game = opts.Game
-        S.counted = false
-        S.msgId = opts.MessageId
-        if not S.msgId then
-            pcall(function()
-                local p = "Stellar/stats_" .. tostring(game.PlaceId) .. ".txt"
-                if exec.isfile and exec.readfile and exec.isfile(p) then
-                    local id = exec.readfile(p)
-                    if type(id) == "string" and id:match("^%d+$") then S.msgId = id end
-                end
-            end)
-        end
-        S.running = true
-        S.gen = S.gen + 1
-        local myGen = S.gen
-        task.spawn(function()
-            task.wait(math.random(0, 8))   -- jitter so users don't all write at once
-            pcall(cycle, true)
-            while S.running and S.gen == myGen do
-                local waited = 0
-                while waited < S.interval and S.running and S.gen == myGen do
-                    task.wait(2); waited = waited + 2
-                end
-                if not (S.running and S.gen == myGen) then break end
-                pcall(cycle, false)
-            end
-        end)
-        return true
-    end
-
-    function Stats.refreshNow()
-        if not S.running then return false end
-        task.spawn(function() pcall(cycle, false) end)
-        return true
-    end
-
-    function Stats.stop() S.running = false; S.gen = S.gen + 1 end
-    function Stats.getMessageId() return S.msgId end
+    return true, applied
 end
 
 return Library
