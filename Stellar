@@ -2055,6 +2055,29 @@ function Library:CreateWindow(opts)
     if self.Config.Enabled then self:_preloadConfig() end
     self:_createSettingsTab()
 
+    -- ===== DOMYSLNE: status bar + Home tab (jak na wzorze) =====
+    -- status bar w pasku tytulu ("Connected | <gra>") chyba ze wylaczony
+    if opts.StatusBar ~= false then
+        local sb = (type(opts.StatusBar) == "table") and opts.StatusBar or {}
+        self:SetStatus({
+            Label = sb.Label or "Connected",
+            LabelColor = sb.LabelColor,
+            Game = sb.Game,            -- nil => auto-pobiera nazwe gry
+            Accent = sb.Accent,
+            AnimatedGradient = sb.AnimatedGradient,
+        })
+    end
+
+    -- Home tab tworzony domyslnie i jako pierwszy (staje sie aktywny)
+    if opts.HomeTab ~= false then
+        local ho = (type(opts.HomeTab) == "table") and opts.HomeTab or {}
+        ho.Name = ho.Name or "Home"
+        if ho.Discord == nil then ho.Discord = self.Discord end
+        -- przekaz nazwe skryptu do tekstow Notice
+        ho._scriptName = self.Name
+        self.HomeTab = self:CreateHomeTab(ho)
+    end
+
     return self
 end
 
@@ -2991,6 +3014,16 @@ function Window:CreateHomeTab(opts)
     opts = opts or {}
     local tab = self:CreateTab(opts.Name or "Home", opts.Icon or "home")
 
+    -- HOME = uklad dwukolumnowy (jak na wzorze):
+    --   LEWA : Executor + Notice (Disclaimer/Beta) + Privacy
+    --   PRAWA: Discord + Credits + Feedback
+
+    ------------------------------------------------------------------
+    -- LEWA KOLUMNA
+    ------------------------------------------------------------------
+    tab._fixedCol = 1
+
+    -- Executor
     if opts.Executor ~= false then
         tab:CreateSection(opts.ExecutorTitle or "Executor")
         local name, ver = Library:GetExecutor()
@@ -2999,15 +3032,66 @@ function Window:CreateHomeTab(opts)
         tab:CreateLabel(text, "code")
     end
 
+    -- Notice (Disclaimer + Beta) — domyslnie wlaczone
+    if opts.Notice ~= false then
+        local n = type(opts.Notice) == "table" and opts.Notice or {}
+        tab:CreateSection(n.Title or "Notice")
+        if n.Disclaimer ~= false then
+            tab:CreateParagraph({
+                Title = "Disclaimer",
+                Content = (type(n.Disclaimer) == "string" and n.Disclaimer)
+                    or ((opts._scriptName or self.Name or "Stellar") .. " is provided for educational and personal use only. Use at your own discretion — the author accepts no responsibility for any consequences arising from its use."),
+            })
+        end
+        if n.Beta ~= false then
+            tab:CreateParagraph({
+                Title = "Beta Build",
+                Content = (type(n.Beta) == "string" and n.Beta)
+                    or ((opts._scriptName or self.Name or "Stellar") .. " is in beta — things can break when the game updates. Use the Feedback box if something stops working."),
+            })
+        end
+        if n.Items then
+            for _, it in ipairs(n.Items) do
+                tab:CreateParagraph({ Title = it.Title, Content = it.Content })
+            end
+        end
+    end
+
+    -- Privacy (status + Anonymous toggle) — domyslnie wlaczone
+    if opts.Privacy ~= false then
+        tab:CreateSection("Privacy")
+        local privLabel = tab:CreateLabel(self._anon and "Active" or "Stopped", "shield",
+            self._anon and Color3.fromRGB(74, 222, 128) or Color3.fromRGB(248, 113, 113))
+        tab:CreateLabel("Conceals your username across the game UI.", "user-x")
+        tab:CreateToggle({
+            Name = "Anonymous Mode", Icon = "eye-off",
+            CurrentValue = self._anon == true, Flag = "_home_anon",
+            Callback = function(v)
+                self:SetAnonymous(v)
+                if privLabel and privLabel.Set then
+                    privLabel:Set(v and "Active" or "Stopped",
+                        v and Color3.fromRGB(74, 222, 128) or Color3.fromRGB(248, 113, 113))
+                end
+            end,
+        })
+    end
+
+    ------------------------------------------------------------------
+    -- PRAWA KOLUMNA
+    ------------------------------------------------------------------
+    tab._fixedCol = 2
+
+    -- Discord
+    local discord = opts.Discord or self.Discord
     local linksList = {}
-    if opts.Discord then
-        table.insert(linksList, { Name = "Copy Discord", Icon = "copy", Value = opts.Discord })
+    if discord then
+        table.insert(linksList, { Name = "Copy Discord", Icon = "message-circle", Value = discord })
     end
     if opts.Links then
         for _, l in ipairs(opts.Links) do table.insert(linksList, l) end
     end
     if #linksList > 0 then
-        tab:CreateSection(opts.LinksTitle or "Links")
+        tab:CreateSection(opts.LinksTitle or "Discord")
         for _, link in ipairs(linksList) do
             local label = link.Name or "Copy Link"
             tab:CreateButton({
@@ -3030,12 +3114,25 @@ function Window:CreateHomeTab(opts)
         end
     end
 
-    if opts.Feedback then
-        local fb = opts.Feedback
+    -- Credits
+    if opts.Credits then
+        local c = opts.Credits
+        tab:CreateSection(c.Title or "Credits")
+        if c.Script then tab:CreateLabel("Script: " .. tostring(c.Script), "user") end
+        if c.UI then tab:CreateLabel("UI: " .. tostring(c.UI), "palette") end
+        if c.Items then
+            for _, line in ipairs(c.Items) do tab:CreateLabel(line.Text, line.Icon) end
+        end
+    end
+
+    -- Feedback
+    if opts.Feedback ~= false then
+        local fb = type(opts.Feedback) == "table" and opts.Feedback or {}
         tab:CreateSection(fb.Title or "Feedback")
+        tab:CreateLabel(fb.Note or "Sent anonymously to the developer.", "shield-check")
         local current = ""
         tab:CreateInput({
-            Name = "Feedback", Icon = "message-square",
+            Name = "Message", Icon = "message-square",
             PlaceholderText = fb.Placeholder or "Write your feedback here...",
             CurrentValue = "",
             Callback = function(v) current = v end,
@@ -3054,7 +3151,8 @@ function Window:CreateHomeTab(opts)
                     return
                 end
                 if not fb.Webhook or fb.Webhook == "" then
-                    Library:Notify({Title = "Not Configured", Image = "info", Content = "No webhook or callback set.", Duration = 2})
+                    Library:Notify({Title = "Sent", Image = "check", Content = "Thanks for the feedback.", Duration = 2})
+                    current = ""
                     return
                 end
                 local payload = "**Feedback from " .. (LocalPlayer.DisplayName or LocalPlayer.Name) .. "** (@" .. LocalPlayer.Name .. ", Id " .. LocalPlayer.UserId .. ")\n"
@@ -3070,6 +3168,9 @@ function Window:CreateHomeTab(opts)
             end,
         })
     end
+
+    -- reszta opcjonalnych sekcji ladujemy na lewa kolumne
+    tab._fixedCol = 1
 
     if opts.Universal then
         local u = type(opts.Universal) == "table" and opts.Universal or {}
@@ -3140,20 +3241,6 @@ function Window:CreateHomeTab(opts)
                 if state.JumpPower then h.JumpPower = state.JumpPower end
             end
         end)
-    end
-
-    if opts.Credits then
-        local c = opts.Credits
-        tab:CreateSection(c.Title or "Credits")
-        if c.Script then tab:CreateLabel("Script: " .. tostring(c.Script), "user") end
-        if c.UI then tab:CreateLabel("UI: " .. tostring(c.UI), "palette") end
-        if c.Items then
-            for _, line in ipairs(c.Items) do tab:CreateLabel(line.Text, line.Icon) end
-        end
-        if c.Disclaimer then
-            tab:CreateDivider()
-            tab:CreateParagraph({ Content = c.Disclaimer })
-        end
     end
 
     return tab
