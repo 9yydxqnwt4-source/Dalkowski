@@ -3712,6 +3712,38 @@ function Tab:CreateDropdown(opts)
     local function rebuildMenu()
         for _, b in ipairs(optionButtons) do b:Destroy() end
         table.clear(optionButtons)
+        if multi then
+            local function actionRow(txt, order, fn)
+                local row = new("TextButton", {
+                    Size = UDim2.new(1, 0, 0, 24), BackgroundColor3 = COLOR.Accent,
+                    BackgroundTransparency = wA(0.12), BorderSizePixel = 0, Text = "",
+                    AutoButtonColor = false, LayoutOrder = order, ZIndex = 51,
+                }, menuScroll)
+                corner(row, 6)
+                new("TextLabel", {
+                    AnchorPoint = Vector2.new(0, 0.5), Position = UDim2.new(0, 11, 0.5, 0),
+                    Size = UDim2.new(1, -22, 1, 0), BackgroundTransparency = 1,
+                    Text = txt, Font = Enum.Font.GothamBold, TextSize = 12,
+                    TextColor3 = Color3.fromRGB(255,255,255),
+                    TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 52,
+                }, row)
+                row.MouseEnter:Connect(function() tween(row, 0.1, { BackgroundTransparency = wA(0.05) }) end)
+                row.MouseLeave:Connect(function() tween(row, 0.1, { BackgroundTransparency = wA(0.12) }) end)
+                row.MouseButton1Click:Connect(fn)
+                table.insert(optionButtons, row)
+            end
+            actionRow("Select All", -2, function()
+                current = {}
+                for _, o in ipairs(options) do table.insert(current, o) end
+                valueLbl.Text = displayText()
+                updateFlag(win, flag, current); pcall(cb, current); rebuildMenu()
+            end)
+            actionRow("Clear", -1, function()
+                current = {}
+                valueLbl.Text = displayText()
+                updateFlag(win, flag, current); pcall(cb, current); rebuildMenu()
+            end)
+        end
         for i, opt in ipairs(options) do
             local sel = isSelected(opt)
             local row = new("TextButton", {
@@ -3763,7 +3795,7 @@ function Tab:CreateDropdown(opts)
             end)
             table.insert(optionButtons, row)
         end
-        local rows = #options
+        local rows = #options + (multi and 2 or 0)
         menuScroll.Size = UDim2.new(1, 0, 0, math.max(30, math.min(rows * 30 - 2, 220)))
     end
     rebuildMenu()
