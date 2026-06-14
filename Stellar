@@ -3640,6 +3640,7 @@ function Tab:CreateDropdown(opts)
     opts = mergeDefaults(opts, "Dropdown")
     local win = self._window
     local options = opts.Options or {}
+    local optInfo = opts.OptionInfo or opts.OptionTooltips
     local multi = opts.MultipleOptions == true
     local current
     if multi then
@@ -3743,6 +3744,10 @@ function Tab:CreateDropdown(opts)
             row.MouseLeave:Connect(function()
                 tween(row, 0.1, { BackgroundTransparency = isSelected(opt) and wA(0.16) or 1 })
             end)
+            if optInfo and optInfo[opt] then
+                row.MouseEnter:Connect(function() showTooltip(optInfo[opt]) end)
+                row.MouseLeave:Connect(function() hideTooltip() end)
+            end
             row.MouseButton1Click:Connect(function()
                 if multi then
                     local idx = table.find(current, opt)
