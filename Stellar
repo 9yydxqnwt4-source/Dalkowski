@@ -55,9 +55,11 @@ end
 
 local function _computeUIScale(viewport)
     local w, h = viewport.X, viewport.Y
-    local cap = _isMobileDevice() and 1.0 or 1.1
+    local mobile = _isMobileDevice()
+    local cap = mobile and 0.78 or 1.1
     -- guarantee the 860x580 window always fits inside the viewport (with a small margin)
     local fit = math.min((w - 40) / 1000, (h - 40) / 580)
+    if mobile then fit = fit * 0.85 end
     return math.max(0.4, math.min(cap, fit))
 end
 
