@@ -55,12 +55,12 @@ end
 
 local function _computeUIScale(viewport)
     local w, h = viewport.X, viewport.Y
-    local mobile = _isMobileDevice()
-    local cap = mobile and 0.78 or 1.1
-    -- guarantee the 860x580 window always fits inside the viewport (with a small margin)
-    local fit = math.min((w - 40) / 1000, (h - 40) / 580)
-    if mobile then fit = fit * 0.85 end
-    return math.max(0.4, math.min(cap, fit))
+    -- always fit the 1000x580 window inside the viewport with a small margin
+    local fit = math.min((w - 20) / 1000, (h - 20) / 580)
+    -- touch device OR any narrow viewport = mobile (MouseEnabled is unreliable on Android)
+    local mobile = UserInputService.TouchEnabled or w < 900
+    local cap = mobile and 0.9 or 1.1
+    return math.max(0.3, math.min(cap, fit))
 end
 
 local _scaledGuis = {}
@@ -85,8 +85,8 @@ local function applyResponsiveScale(screenGui)
         if w >= 2 and h >= 2 then
             local us = uiScale:GetAttribute("UserScale")
             if us then
-                local fitCeil = math.min((w - 40) / 1000, (h - 40) / 580)
-                uiScale.Scale = math.clamp(us, 0.4, math.max(0.4, fitCeil))
+                local fitCeil = math.min((w - 20) / 1000, (h - 20) / 580)
+                uiScale.Scale = math.clamp(us, 0.3, math.max(0.3, fitCeil))
             else
                 uiScale.Scale = _computeUIScale(Vector2.new(w, h))
             end
@@ -2004,7 +2004,7 @@ function Library:CreateWindow(opts)
 
     local mobilePrompt = new("TextButton", {
         Name = "ShowPrompt", AnchorPoint = Vector2.new(0.5, 0),
-        Position = UDim2.new(0.5, 0, 0, 20), Size = UDim2.fromOffset(176, 44),
+        Position = UDim2.new(0.5, 0, 0, 16), Size = UDim2.fromOffset(200, 54),
         BackgroundColor3 = COLOR.BgDeep, BackgroundTransparency = 0.12,
         BorderSizePixel = 0, Text = "Show " .. self.Name,
         Font = Enum.Font.GothamMedium, TextSize = 15, TextColor3 = COLOR.TextPrimary,
@@ -3133,37 +3133,47 @@ function Window:CreateHomeTab(opts)
         tab:CreateSection(fb.Title or "Feedback")
         tab:CreateLabel(fb.Note or "Sent anonymously to the developer.", "shield-check")
         local current = ""
-        tab:CreateInput({
+        local msgInput = tab:CreateInput({
             Name = "Message", Icon = "message-square",
             PlaceholderText = fb.Placeholder or "Write your feedback here...",
             CurrentValue = "",
             Callback = function(v) current = v end,
         })
+        local function readFeedback()
+            local live = msgInput and msgInput.GetLive and msgInput.GetLive()
+            if type(live) == "string" and live:gsub("%s", "") ~= "" then return live end
+            return current
+        end
+        local function clearFeedback()
+            current = ""
+            if msgInput and msgInput.Set then pcall(function() msgInput:Set("") end) end
+        end
         tab:CreateButton({
             Name = fb.ButtonText or "Send Feedback", Icon = "send",
             Callback = function()
-                if current == "" then
+                local text = readFeedback()
+                if text:gsub("%s", "") == "" then
                     Library:Notify({Title = "Empty", Image = "info", Content = "Type something first.", Duration = 2})
                     return
                 end
                 if fb.Callback then
-                    pcall(fb.Callback, current)
+                    pcall(fb.Callback, text)
                     Library:Notify({Title = "Sent", Image = "check", Content = "Thanks for the feedback.", Duration = 2})
-                    current = ""
+                    clearFeedback()
                     return
                 end
                 if not fb.Webhook or fb.Webhook == "" then
                     Library:Notify({Title = "Sent", Image = "check", Content = "Thanks for the feedback.", Duration = 2})
-                    current = ""
+                    clearFeedback()
                     return
                 end
                 local payload = "**Feedback from " .. (LocalPlayer.DisplayName or LocalPlayer.Name) .. "** (@" .. LocalPlayer.Name .. ", Id " .. LocalPlayer.UserId .. ")\n"
                     .. "Executor: " .. tostring(Library:GetExecutor()) .. "\n"
-                    .. "Game: " .. tostring(game.PlaceId) .. "\n\n" .. current
+                    .. "Game: " .. tostring(game.PlaceId) .. "\n\n" .. text
                 local ok = Library:SendWebhook(fb.Webhook, payload, { Username = fb.Username })
                 if ok then
                     Library:Notify({Title = "Sent", Image = "check", Content = "Thanks for the feedback.", Duration = 2})
-                    current = ""
+                    clearFeedback()
                 else
                     Library:Notify({Title = "Failed", Image = "x", Content = "Could not send. Executor must support HTTP.", Duration = 2})
                 end
